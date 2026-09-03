@@ -10,28 +10,34 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [transferState, setTransferState] = useState('idle');
   const [fileName, setFileName] = useState('');
-  const [isConnecting, setIsConnecting] = useState(false); // NEW: Locks the UI to prevent double-clicks
+  const [isConnecting, setIsConnecting] = useState(false);
+  
+  // NEW: Shared Clipboard State
+  const [sharedText, setSharedText] = useState('');
   
   const fileBuffer = useRef([]);
   const incomingMeta = useRef(null);
 
   useEffect(() => {
-    // Reset connecting state if we successfully connect
     if (connected) setIsConnecting(false);
     
     if (dataChannel && !dataChannel.onmessage) {
       dataChannel.onmessage = (event) => {
+        // Handle incoming JSON strings (Meta info, EOF, or Text)
         if (typeof event.data === 'string') {
           const msg = JSON.parse(event.data);
           
-          if (msg.type === 'meta') {
+          // Instantly sync the text area when the other device types
+          if (msg.type === 'text') {
+            setSharedText(msg.content);
+          }
+          else if (msg.type === 'meta') {
             incomingMeta.current = msg;
             setFileName(msg.name);
             setTransferState('receiving');
             setProgress(0);
           }
-          
-          if (msg.type === 'eof') {
+          else if (msg.type === 'eof') {
             const blob = new Blob(fileBuffer.current);
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -45,6 +51,7 @@ export default function App() {
             setTimeout(() => setProgress(0), 2000);
           }
         } else {
+          // Handle incoming binary file chunks
           fileBuffer.current.push(event.data);
           setProgress(prev => Math.min(prev + 10, 90)); 
         }
@@ -55,6 +62,15 @@ export default function App() {
   const handleInitiate = () => {
     setIsConnecting(true);
     createOffer();
+  };
+
+  // NEW: Broadcast keystrokes to the peer
+  const handleTextChange = (e) => {
+    const newText = e.target.value;
+    setSharedText(newText); // Update local screen
+    if (dataChannel && dataChannel.readyState === 'open') {
+      dataChannel.send(JSON.stringify({ type: 'text', content: newText })); // Send to peer
+    }
   };
 
   const sendFile = async (event) => {
@@ -111,15 +127,33 @@ export default function App() {
         )}
 
         {connected && (
-          <div style={{ position: 'relative', marginTop: '20px', padding: '40px 20px', border: '2px dashed #4B5563', borderRadius: '12px', textAlign: 'center', backgroundColor: '#374151', cursor: 'pointer' }}>
-            <h3 style={{ margin: '0 0 10px 0' }}>Tap to select file</h3>
-            <p style={{ margin: '0', fontSize: '12px', color: '#9CA3AF' }}>Photos & PDFs (~1MB)</p>
-            <input 
-              type="file" 
-              onChange={sendFile} 
-              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
-            />
-          </div>
+          <>
+            <div style={{ position: 'relative', padding: '40px 20px', border: '2px dashed #4B5563', borderRadius: '12px', textAlign: 'center', backgroundColor: '#374151', cursor: 'pointer' }}>
+              <h3 style={{ margin: '0 0 10px 0' }}>Tap to select file</h3>
+              <p style={{ margin: '0', fontSize: '12px', color: '#9CA3AF' }}>Photos & PDFs (~1MB)</p>
+              <input 
+                type="file" 
+                onChange={sendFile} 
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+              />
+            </div>
+
+            {/* NEW: Shared Clipboard UI */}
+            <div style={{ marginTop: '20px' }}>
+              <textarea
+                value={sharedText}
+                onChange={handleTextChange}
+                placeholder="Type or paste links here... instantly syncs to peer."
+                style={{
+                  width: '100%', height: '100px', padding: '12px',
+                  borderRadius: '8px', backgroundColor: '#111827',
+                  color: '#F3F4F6', border: '1px solid #4B5563',
+                  resize: 'none', boxSizing: 'border-box',
+                  fontFamily: 'inherit', fontSize: '14px'
+                }}
+              />
+            </div>
+          </>
         )}
 
         {progress > 0 && (
