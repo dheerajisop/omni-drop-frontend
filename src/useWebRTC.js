@@ -15,7 +15,7 @@ export const useWebRTC = (roomCode) => {
 
   useEffect(() => {
     // Replace with your actual Render URL! 
-    ws.current = new WebSocket(`wss://omnidrop-backend-xyz.onrender.com`);
+    ws.current = new WebSocket(`wss://omni-drop-backend.onrender.com`);
     
     ws.current.onopen = () => {
       ws.current.send(JSON.stringify({ type: 'join', roomCode }));
